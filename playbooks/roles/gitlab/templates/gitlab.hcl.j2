@@ -31,7 +31,9 @@ job "{{ nomad_gitlab_job_name }}" {
     service {
       name = "{{ nomad_gitlab_services[0].name }}"
       port = "{{ nomad_gitlab_services[0].port }}"
-      tags = [
+      tags = [ 
+        "metrics", 
+        "logs",
         "traefik.enable=true",
         "traefik.http.routers.gitlab.tls=true",
         "traefik.http.routers.gitlab.entrypoints=https",
