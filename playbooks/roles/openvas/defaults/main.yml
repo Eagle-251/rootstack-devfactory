@@ -1,0 +1,5 @@
+nomad_openvas_gvmd_image: "greenbone/gvmd:{{ nomad_openvas_gvmd_image_tag }}"
+nomad_openvas_gvmd_image_tag: "stable"
+
+nomad_openvas_ospd-openvas_image: "greenbone/ospd-openvas:{{ nomad_openvas_ospd-openvas_image_tag }}"
+nomad_openvas_ospd-openvas_image_tag: "stable"
