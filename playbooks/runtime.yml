@@ -48,3 +48,7 @@
       tags:
         - gitlab
       when: gitlab_enabled | bool
+    - role: openvas
+      tags:
+        - openvas
+      when: openvas_enabled | bool

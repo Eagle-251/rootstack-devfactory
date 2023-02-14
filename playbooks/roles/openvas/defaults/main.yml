@@ -1,5 +1,56 @@
-nomad_openvas_gvmd_image: "greenbone/gvmd:{{ nomad_openvas_gvmd_image_tag }}"
-nomad_openvas_gvmd_image_tag: "stable"
+openvas_enabled: false
 
-nomad_openvas_ospd-openvas_image: "greenbone/ospd-openvas:{{ nomad_openvas_ospd-openvas_image_tag }}"
-nomad_openvas_ospd-openvas_image_tag: "stable"
+
+# Basic job info
+nomad_openvas_job_name: "openvas"
+nomad_openvas_group_count: 1
+
+
+
+## Images
+
+nomad_openvas_gvmd_image: "greenbone/gvmd@{{ nomad_openvas_gvmd_image_tag }}"
+nomad_openvas_gvmd_image_tag: "sha256:ab156d67241692e615a7d3736e6a258f63decb61bd364c7a2df82125f82d04c7"
+
+nomad_openvas_ospd_openvas_image: "greenbone/ospd-openvas@{{ nomad_openvas_ospd_openvas_image_tag }}"
+nomad_openvas_ospd_openvas_image_tag: "sha256:f62472e214af8b4331f45cd081bb7abb44ba5551124b9c209c253230ea6418b7"
+
+nomad_openvas_gsa_image: "greenbone/gsa@{{ nomad_openvas_gsa_image_digest }}"
+nomad_openvas_gsa_image_digest: sha256:45ba5d60e61e16f157147bb2ca127f0836f5f30cfe26762a702b4046a3212f8b
+
+nomad_openvas_postgres_image: "greenbone/pg-gvm@{{ nomad_openvas_postgres_image_digest }}"
+nomad_openvas_postgres_image_digest: "sha256:e061b8b345638207b5bdb147610fff6b69b36ddc8edd17552eeffab018774b29"
+
+nomad_openvas_mqtt_broker_image: "greenbone/mqtt-broker@{{ nomad_openvas_mqtt_broker_digest }}"
+nomad_openvas_mqtt_broker_digest: "sha256:77483c1ddad7a765df043f374eb2603c9b90c84753b70c8052556892699d47f7"
+
+nomad_openvas_notus_scanner_image: "greenbone/notus-scanner@{{ nomad_openvas_notus_scanner_digest }}"
+nomad_openvas_notus_scanner_digest: "sha256:5fb14906a7a08594cb822c7b39a09e6f1abdff64a3a845496f361a631cc22f26"
+
+nomad_openvas_redis_image: "greenbone/redis-server@{{ nomad_openvas_redis_image_digest }}"
+nomad_openvas_redis_image_digest: "sha256:6482c16c6c2635c79a1f155c5ba67cb178f91e95a4188334f320f0256b1b5079"
+
+nomad_openvas_sockets_path: "alloc/sockets"
+nomad_openvas_data_path: "/data"
+nomad_openvas_postgres_data_path: "{{ nomad_openvas_data_path}}/database"
+
+nomad_openvas_busybox_image: "busybox:{{ nomad_openvas_busybox_image_tag }}"
+nomad_openvas_busybox_image_tag: "1.33.0"
+
+
+
+nomad_openvas_network:
+  - name: http
+    port: 80
+    hostnetwork: public
+  - name: mqtt
+    port: "{{ nomad_openvas_mqtt_port }}"
+    hostnetwork: public
+
+nomad_openvas_mqtt_port: 1883
+
+nomad_openvas_services:
+  - name: openvas
+    port: "{{ nomad_openvas_network[0].name }}"
+  - name: openvas-mqtt
+    port: "{{ nomad_openvas_mqtt_port }}"

@@ -1,0 +1,171 @@
+job "{{ nomad_openvas_job_name }}" {
+  datacenters = ["{{ nomad_datacenter }}"]
+  type = "service"
+
+  constraint {
+    attribute = "${attr.kernel.name}"
+    value     = "linux"
+  }
+
+  group "openvas" {
+    count = "{{ nomad_openvas_group_count }}"
+
+    volume "openvas_data"{
+      type = "{{ nomad_openvas_volume.type }}"
+      access_mode     = "{{ nomad_openvas_volume.accessmode }}"
+      attachment_mode = "{{ nomad_openvas_volume.attachmentmode }}"     
+      read_only = {{ nomad_openvas_volume.read_only }}
+      source = "{{ nomad_openvas_volume.id }}"
+    }
+    volume "openvas_database"{
+      type = "{{ nomad_openvas_volume.type }}"
+      access_mode     = "{{ nomad_openvas_volume.accessmode }}"
+      attachment_mode = "{{ nomad_openvas_volume.attachmentmode }}"     
+      read_only = {{ nomad_openvas_volume.read_only }}
+      source = "{{ nomad_openvas_volume.id }}"
+    }
+
+    network {
+      mode = "bridge"
+      port "{{ nomad_openvas_network[0].name }}" {
+        to = {{ nomad_openvas_network[0].port }}
+        host_network = "{{ nomad_openvas_network[0].hostnetwork }}"
+      }
+      port "{{ nomad_openvas_network[1].name }}" {
+        static = {{ nomad_openvas_network[1].port }}
+        host_network = "{{ nomad_openvas_network[1].hostnetwork }}"
+      }
+    }
+
+    service {
+      name = "{{ nomad_openvas_services[0].name }}"
+      port = "{{ nomad_openvas_services[0].port }}"
+      tags = [
+        "traefik.enable=true",
+        "traefik.http.routers.openvas.tls=true",
+        "traefik.http.routers.openvas.entrypoints=https",
+        "traefik.http.routers.openvas.tls.certResolver={{ consul_dc_name }}",
+        "traefik.http.routers.openvas.tls.domains[0].main=openvas.{{ zone }}",
+      ]
+    }
+
+   # task "prepare_volume" {
+   #   driver = "docker"
+   #   config {
+   #    image = "{{ nomad_openvas_busybox_image }}"
+   #    command = "sh"
+   #    args = ["-c", "./local/volume-setup.sh"]
+   #   }
+   #   volume_mount {
+   #       volume = "openvas_data"
+   #       destination = "/var/lib"
+   #   }
+   #   template {
+   #       data = <<EOH
+   #       EOH
+   #       destination = "local/volume-setup.sh"
+   #       perms = "744"
+   #   }
+   #   lifecycle {
+   #       hook = "prestart"
+   #       sidecar = false
+   #   }
+   # }
+
+    task "redis_server" {
+        driver = "docker"
+        config {
+            image = "{{ nomad_openvas_redis_image }}"
+        }
+    }
+
+    task "postgres_gvm" {
+        driver = "docker"
+        env {
+            PG_DATA = "{{ nomad_openvas_postgres_data_path }}"
+        }
+        config {
+            image = "{{ nomad_openvas_postgres_image }}"
+        }
+        volume_mount {
+            volume = "openvas_database"
+            destination = "/data"
+        }
+    }
+
+    task "gvmd" {
+        driver = "docker"
+        config {
+            image = "{{ nomad_openvas_gvmd_image }}"
+            command = "sh"
+            args = ["-c", "./local/feed-sync.sh && /usr/local/bin/start-gvmd"]
+        }
+        template {
+            data = <<EOH
+            {{ lookup('ansible.builtin.template', 'feed-sync.sh.j2') }}
+            EOH
+            destination = "local/feed-sync.sh"
+            perms = "744"
+        }
+        volume_mount {
+            volume = "openvas_data"
+            destination = "/var/lib"
+        }
+    }
+
+    task "gsa" {
+        driver = "docker"
+        config {
+          image = "{{ nomad_openvas_gsa_image}}"
+          ports = ["http"]
+        }
+    }
+    task "ospd-openvas" {
+        driver = "docker"
+        config {
+            image = "{{ nomad_openvas_ospd_openvas_image }}"
+            cap_add = ["NET_ADMIN", "NET_RAW"]
+            security_opt = ["seccomp=unconfined", "apparmor=unconfined"]
+            init = true
+            command = "ospd-openvas"
+            args = [
+              "-f",
+              "--config",
+              "/etc/gvm/ospd-openvas.conf",
+              "--mqtt-broker-address",
+              "localhost",
+              "--notus-feed-dir",
+              "/var/lib/notus/advisories",
+              "-m",
+              "666"
+            ]
+        }
+        volume_mount {
+            volume = "openvas_data"
+            destination = "/var/lib"
+        }
+    }
+
+    task "mqtt_broker" {
+        driver = "docker"
+        config {
+            image = "{{ nomad_openvas_mqtt_broker_image }}"
+            ports = ["{{ nomad_openvas_network[1].name }}"] 
+          }
+    }
+    task "notus_scanner" {
+        driver = "docker"
+        env {
+            NOTUS_SCANNER_MQTT_BROKER_ADDRESS = "localhost"
+            NOTUS_SCANNER_PRODUCTS_DIRECTORY = "/var/lib/notus/products"
+        }
+        config { 
+            image = "{{ nomad_openvas_notus_scanner_image }}"
+        }
+        volume_mount {
+            volume = "openvas_data"
+            destination = "/var/lib"
+        }
+    }
+  }
+}
