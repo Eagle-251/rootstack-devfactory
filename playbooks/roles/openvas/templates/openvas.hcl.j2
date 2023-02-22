@@ -49,33 +49,36 @@ job "{{ nomad_openvas_job_name }}" {
       ]
     }
 
-   # task "prepare_volume" {
-   #   driver = "docker"
-   #   config {
-   #    image = "{{ nomad_openvas_busybox_image }}"
-   #    command = "sh"
-   #    args = ["-c", "./local/volume-setup.sh"]
-   #   }
-   #   volume_mount {
-   #       volume = "openvas_data"
-   #       destination = "/var/lib"
-   #   }
-   #   template {
-   #       data = <<EOH
-   #       EOH
-   #       destination = "local/volume-setup.sh"
-   #       perms = "744"
-   #   }
-   #   lifecycle {
-   #       hook = "prestart"
-   #       sidecar = false
-   #   }
-   # }
+    task "create_socket_paths" {
+        driver = "docker"
+        config {
+            image = "{{ nomad_openvas_python_image }}"
+            command = "local/make_sockets"
+            args = ["-s", "redis postgres ospd gvmd", "-d", "{{ nomad_openvas_sockets_path }}"
+          }
+        template {
+            data = <<EOH
+{{ lookup('ansible.builtin.file', 'make_sockets.py') }}
+EOH
+            destination = "local/make_sockets"
+            perms = "744"
+        }
+        lifecycle {
+            hook = "prestart"
+            sidecar = false
+        } 
+    }
 
     task "redis_server" {
         driver = "docker"
         config {
             image = "{{ nomad_openvas_redis_image }}"
+            mount {
+                type = "bind"
+                target = "{{ nomad_openvas_redis_socket_target }}"
+                source = "{{ nomad_openvas_redis_socket_source }}"
+                readonly = false
+            }
         }
     }
 
@@ -86,6 +89,12 @@ job "{{ nomad_openvas_job_name }}" {
         }
         config {
             image = "{{ nomad_openvas_postgres_image }}"
+            mount {
+                type = "bind"
+                target = "{{ nomad_openvas_postgres_socket_target }}"
+                source = "{{ nomad_openvas_postgres_socket_source }}"
+                readonly = false
+            }
         }
         volume_mount {
             volume = "openvas_database"
@@ -99,10 +108,28 @@ job "{{ nomad_openvas_job_name }}" {
             image = "{{ nomad_openvas_gvmd_image }}"
             command = "sh"
             args = ["-c", "./local/feed-sync.sh && /usr/local/bin/start-gvmd"]
+            mount {
+                type = "bind"
+                target = "{{ nomad_openvas_gvmd_socket_target }}"
+                source = "{{ nomad_openvas_gvmd_socket_source }}"
+                readonly = false
+              }
+            mount {
+                type = "bind"
+                target = "{{ nomad_openvas_ospd_openvas_socket_target }}"
+                source = "{{ nomad_openvas_ospd_openvas_socket_source }}"
+                readonly = false
+              }
+            mount {
+                type = "bind"
+                target = "{{ nomad_openvas_postgres_socket_target }}"
+                source = "{{ nomad_openvas_postgres_socket_source }}"
+                readonly = false
+              }
         }
         template {
             data = <<EOH
-            {{ lookup('ansible.builtin.template', 'feed-sync.sh.j2') }}
+            {{ lookup('ansible.builtin.file', 'feed-sync.sh') }}
             EOH
             destination = "local/feed-sync.sh"
             perms = "744"
@@ -124,21 +151,26 @@ job "{{ nomad_openvas_job_name }}" {
         driver = "docker"
         config {
             image = "{{ nomad_openvas_ospd_openvas_image }}"
-            cap_add = ["NET_ADMIN", "NET_RAW"]
+            command = "sh"
+            args = [
+            "-c", 
+            "/usr/local/bin/greenbone-nvt-sync && ospd-openvas --config /etc/gvm/ospd-openvas.conf --mqtt-broker-address localhost --notus-feed-dir /var/lib/notus/advisories -m 666"
+            ]
+            mount {
+                type = "bind"
+                target = "{{ nomad_openvas_ospd_openvas_socket_target }}"
+                source = "{{ nomad_openvas_ospd_openvas_socket_source }}"
+                readonly = false
+              }
+            mount {
+                type = "bind"
+                target = "{{ nomad_openvas_redis_socket_target }}"
+                source = "{{ nomad_openvas_redis_socket_source }}"
+                readonly = false
+              }
+            #cap_add = ["NET_ADMIN", "NET_RAW"]
             security_opt = ["seccomp=unconfined", "apparmor=unconfined"]
             init = true
-            command = "ospd-openvas"
-            args = [
-              "-f",
-              "--config",
-              "/etc/gvm/ospd-openvas.conf",
-              "--mqtt-broker-address",
-              "localhost",
-              "--notus-feed-dir",
-              "/var/lib/notus/advisories",
-              "-m",
-              "666"
-            ]
         }
         volume_mount {
             volume = "openvas_data"

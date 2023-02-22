@@ -1,3 +1,8 @@
+
+- name: Debug make sockets script
+  ansible.builtin.debug:
+  msg: "{{  }}"
+
 - name: Check to see if openvas job is already running 
   ansible.builtin.uri:
     url: "http://nomad.service.consul:4646/v1/job/{{ nomad_openvas_job_name }}"
