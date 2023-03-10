@@ -53,12 +53,30 @@ job "{{ nomad_openvas_job_name }}" {
         driver = "docker"
         config {
             image = "{{ nomad_openvas_python_image }}"
-            command = "local/make_sockets"
-            args = ["-s", "redis postgres ospd gvmd", "-d", "{{ nomad_openvas_sockets_path }}"
+            command = "sh"
+            args = ["-c", "python local/make_sockets -s redis postgres ospd gvmd -d {{ nomad_openvas_sockets_path }}"
           }
         template {
             data = <<EOH
-{{ lookup('ansible.builtin.file', 'make_sockets.py') }}
+#!/usr/local/bin/python
+
+import socket as s
+import os
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('-s', nargs='+')
+parser.add_argument('-d')
+args = parser.parse_args()
+sockets = args.s
+dir = args.d
+try:
+    os.mkdir(dir)
+except FileExistsError:
+    print("Directory already exists, skipping...")
+finally:
+    for addr in sockets:
+        sock = s.socket(s.AF_UNIX)
+        sock.bind(dir + "/" + addr)
 EOH
             destination = "local/make_sockets"
             perms = "744"
